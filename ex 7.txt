@@ -1,0 +1,196 @@
+DECLARE
+    -- Declare the cursor to fetch data from the savings_account table
+    CURSOR c_savings IS
+        SELECT acc_no, name, principal, rate FROM savings_account;
+    
+    -- Declare variables to store fetched data
+    v_acc_no savings_account.acc_no%TYPE;
+    v_name savings_account.name%TYPE;
+    v_principal savings_account.principal%TYPE;
+    v_rate savings_account.rate%TYPE;
+    v_quarterly_si NUMBER;  -- Variable to hold calculated interest
+BEGIN
+    -- Open the cursor
+    OPEN c_savings;
+    
+    -- Loop through all rows fetched by the cursor
+    LOOP
+        FETCH c_savings INTO v_acc_no, v_name, v_principal, v_rate;
+        
+        -- Exit the loop when no more rows are fetched
+        EXIT WHEN c_savings%NOTFOUND;
+        
+        -- Calculate the quarterly simple interest using the formula
+        v_quarterly_si := (v_principal * v_rate * (1/4)) / 100;
+        
+        -- Display the account information and quarterly interest
+        DBMS_OUTPUT.PUT_LINE('Account No: ' || v_acc_no || ', Name: ' || v_name);
+        DBMS_OUTPUT.PUT_LINE('Quarterly Interest: ' || v_quarterly_si);
+        DBMS_OUTPUT.PUT_LINE('-----------------------------');
+    END LOOP;
+    
+    -- Close the cursor after processing all rows
+    CLOSE c_savings;
+END;
+/
+-----------------------------------------------------------------------------
+
+CREATE TABLE credit_card_transactions (
+    credit_card_no VARCHAR2(16) ,
+    card_holder VARCHAR2(100),
+    customer_id NUMBER,
+    transaction_date DATE,
+    amount NUMBER
+);
+
+DECLARE
+    CURSOR c_customers IS
+        SELECT DISTINCT credit_card_no, card_holder, customer_id 
+        FROM credit_card_transactions;
+    
+    v_credit_card_no credit_card_transactions.credit_card_no%TYPE;
+    v_card_holder credit_card_transactions.card_holder%TYPE;
+    v_customer_id credit_card_transactions.customer_id%TYPE;
+    v_amount NUMBER;
+    v_total NUMBER;
+BEGIN
+    FOR rec IN c_customers LOOP
+        v_total := 0;  -- Initialize total for each customer
+        
+        FOR trans IN (SELECT amount, transaction_date 
+                      FROM credit_card_transactions 
+                      WHERE credit_card_no = rec.credit_card_no
+                        AND TO_CHAR(transaction_date, 'MMYYYY') = TO_CHAR(SYSDATE, 'MMYYYY')) LOOP
+            
+            v_amount := trans.amount;
+            v_total := v_total + v_amount;
+            
+            DBMS_OUTPUT.PUT_LINE('Credit Card No: ' || rec.credit_card_no || 
+                                 ' | Card Holder: ' || rec.card_holder || 
+                                 ' | Transaction Date: ' || TO_CHAR(trans.transaction_date, 'DD-MM-YYYY') || 
+                                 ' | Amount: ₹' || v_amount);
+        END LOOP;
+        
+        DBMS_OUTPUT.PUT_LINE('Total Monthly Bill for ' || rec.card_holder || ' (Credit Card No: ' || rec.credit_card_no || '): ' || v_total); 
+        DBMS_OUTPUT.PUT_LINE('----------------------------------------------');
+    END LOOP;
+END;
+/
+
+------------------------------------------------------------------------------------
+CREATE TABLE credit_cardss (
+    txn_id         NUMBER PRIMARY KEY,
+    card_no        VARCHAR2(20),
+    card_holder    VARCHAR2(50),
+    txn_date       DATE,
+    amount         NUMBER(10,2),
+    description    VARCHAR2(100)
+);
+
+-----------------------------------------------------------------------------
+
+-- Declare variables for the PL/SQL block
+DECLARE
+    v_admission_year       VARCHAR2(4) := '2023';            -- Year of enrollment
+    v_college_list_number  VARCHAR2(2) := '03';              -- College list number
+    v_college_code         VARCHAR2(4) := '7176';             -- College code
+    v_course_code          VARCHAR2(3) := '726';              -- Course code
+    v_medium               NUMBER := 2;                        -- Medium of instruction (1 for English, 2 for others)
+    v_gender               CHAR(1);                            -- Gender (M for Male, F for Female)
+    v_roll_number          NUMBER;                             -- Individual roll number
+    v_university_roll_no   VARCHAR2(16);                       -- Final university roll number
+
+    -- Cursor to fetch student details
+    CURSOR c_students IS
+        SELECT name, roll_no, gender 
+        FROM student_details;
+    
+BEGIN
+    -- Loop through each student record
+    FOR student_rec IN c_students LOOP
+        -- Generate the university roll number based on the student details
+        v_university_roll_no := TO_CHAR(
+                                   SUBSTR(TO_CHAR(v_admission_year), -2) ||   -- Last 2 digits of admission year
+                                   LPAD(v_college_list_number, 2, '0') ||    -- College list number
+                                   LPAD(v_college_code, 4, '0') ||            -- College code
+                                   LPAD(v_course_code, 3, '0') ||             -- Course code
+                                   v_medium ||                               -- Medium of instruction
+                                   CASE student_rec.gender                    -- Gender (M=1, F=2)
+                                       WHEN 'M' THEN '1'
+                                       WHEN 'F' THEN '2'
+                                   END ||
+                                   LPAD(student_rec.roll_no, 3, '0')          -- Roll number (3 digits)
+                               );
+
+        -- Update the student record with the generated university roll number
+        UPDATE student_details
+        SET university_roll_number = v_university_roll_no
+        WHERE name = student_rec.name
+          AND roll_no = student_rec.roll_no;
+        
+        -- Output the name and university roll number for verification
+        DBMS_OUTPUT.PUT_LINE('Name: ' || student_rec.name || ' | University Roll Number: ' || v_university_roll_no);
+    END LOOP;
+
+    -- Final output message
+    DBMS_OUTPUT.PUT_LINE('University roll numbers generated successfully.');
+END;
+/
+----------------------------------------------------------------------
+
+CREATE TABLE credit_card_transactions (
+    txn_id         NUMBER PRIMARY KEY,
+    card_no        VARCHAR2(20),
+    card_holder    VARCHAR2(50),
+    txn_date       DATE,
+    amount         NUMBER(10,2),
+    description    VARCHAR2(100)
+);
+
+
+CREATE TABLE credit_card_backup (
+    txn_id        NUMBER,
+    card_no       VARCHAR2(20),
+    card_holder   VARCHAR2(20),
+    txn_date      DATE,
+    amount        NUMBER(6,2),
+    description   VARCHAR2(20),
+    action_type   VARCHAR2(6),  
+    action_time   DATE           
+);
+
+
+
+CREATE OR REPLACE TRIGGER trg_backup_credit_card
+BEFORE UPDATE OR DELETE ON credit_card_transactions
+FOR EACH ROW
+BEGIN
+    IF DELETING THEN
+        INSERT INTO credit_card_backup VALUES (:OLD.txn_id,:OLD.card_no,:OLD.card_holder,:OLD.txn_date,:OLD.amount,:OLD.description,'DELETE',SYSDATE );
+    ELSIF UPDATING THEN
+        INSERT INTO credit_card_backup VALUES (:OLD.txn_id,:OLD.card_no,:OLD.card_holder,:OLD.txn_date,:OLD.amount,:OLD.description,'UPDATE',SYSDATE);
+    END IF;
+END;
+/
+
+
+
+
+INSERT INTO credit_card_transactions VALUES (19, '3456-7890-1234-1234', 'Shree P', TO_DATE('2025-08-11', 'YYYY-MM-DD'), 5000.00, 'Clothing');
+
+
+
+UPDATE credit_card_transactions SET amount = amount + 500 WHERE txn_id = 1;
+
+DELETE FROM credit_card_transactions WHERE txn_id = 19;
+
+SELECT * FROM credit_card_backup;
+
+
+
+SQL> SELECT * FROM credit_card_backup;
+
+    TXN_ID CARD_NO              CARD_HOLDER          TXN_DATE      AMOUNT DESCRIPTION          ACTION ACTION_TI
+---------- -------------------- -------------------- --------- ---------- -------------------- ------ ---------
+         1 1234-5678-9012-3456  Aishwarya C 05-MAR-25       2000 Amazon Purchase      UPDATE 08-APR-25
+        19 3456-7890-1234-1234  Shree P                11-AUG-25       5000 Clothing   
